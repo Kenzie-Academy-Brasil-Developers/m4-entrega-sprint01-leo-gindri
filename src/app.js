@@ -36,6 +36,47 @@ const ensureAuthMiddleware = (request, response, next) => {
   });
 };
 
+const admAuthMiddleware = (request, response, next) => {
+  const id = request.user.id;
+  const userIsAdm = users.find((el) => el.uuid === id);
+  console.log(userIsAdm);
+  if (!userIsAdm.isAdm) {
+    return response.status(403).json({
+      message: "You do not have administrator permissions.",
+    });
+  }
+
+  return next();
+};
+
+const editAuthenticationMiddleware = (request, response, next) => {
+  const userId = request.user.id;
+
+  const id = request.params.id;
+  const user = users.find((el) => el.uuid === userId);
+
+  if (user.uuid === id || user.isAdm === true) {
+    return next();
+  }
+
+  return response.status(403).json({
+    message: "Missing admin permissions",
+  });
+};
+
+const deleteAuthenticaitonMiddleware = (request, response, next) => {
+  const userId = request.user.id;
+  const user = users.find((el) => el.uuid === userId);
+
+  if (userId === request.params.id || user.isAdm === true) {
+    return next();
+  }
+
+  return response.status(403).json({
+    message: "Missing authorization headers",
+  });
+};
+
 // .
 // .
 // .
@@ -102,17 +143,6 @@ const createUserService = async (userData) => {
 };
 
 const listUsersService = (data) => {
-  const id = data.user.id;
-  const userIsAdm = users.find((el) => el.uuid === id);
-  if (!userIsAdm.isAdm) {
-    return [
-      403,
-      {
-        message: "You do not have administrator permissions.",
-      },
-    ];
-  }
-
   return [200, users];
 };
 
@@ -135,8 +165,6 @@ const listProfileUserService = (data) => {
 
 const editUsersService = async (data, req) => {
   const userId = req.user.id;
-
-  const id = req.params.id;
   const user = users.find((el) => el.uuid === userId);
 
   const updatedData = {
@@ -150,34 +178,13 @@ const editUsersService = async (data, req) => {
     email: data.email == undefined ? user.email : data.email,
   };
 
-  if (updatedData.uuid === id || user.isAdm === true) {
-    return [200, { ...updatedData, password: undefined }];
-  }
-
-  return [
-    403,
-    {
-      message: "Missing admin permissions",
-    },
-  ];
+  return [200, { ...updatedData, password: undefined }];
 };
 
 const deleteUsersService = (req) => {
-  const userId = req.user.id;
-  const user = users.find((el) => el.uuid === userId);
+  users.splice(req.params.id, 1);
 
-  if (userId === req.params.id || user.isAdm === true) {
-    users.splice(req.params.id, 1);
-
-    return [204, {}];
-  }
-
-  return [
-    403,
-    {
-      message: "Missing authorization headers",
-    },
-  ];
+  return [204, {}];
 };
 // .
 // .
@@ -227,11 +234,21 @@ const deleteUsersCotroller = (request, response) => {
 };
 
 app.post("/users", createUserController);
-app.get("/users", ensureAuthMiddleware, listUsersController);
+app.get("/users", ensureAuthMiddleware, admAuthMiddleware, listUsersController);
 app.post("/login", createSessionController);
 app.get(`/users/profile`, ensureAuthMiddleware, listProfileUserController);
-app.patch("/users/:id", ensureAuthMiddleware, editUsersController);
-app.delete("/users/:id", ensureAuthMiddleware, deleteUsersCotroller);
+app.patch(
+  "/users/:id",
+  ensureAuthMiddleware,
+  editAuthenticationMiddleware,
+  editUsersController
+);
+app.delete(
+  "/users/:id",
+  ensureAuthMiddleware,
+  deleteAuthenticaitonMiddleware,
+  deleteUsersCotroller
+);
 
 app.listen(process.env.PORT);
 
